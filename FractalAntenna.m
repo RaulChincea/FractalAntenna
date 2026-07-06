@@ -92,7 +92,7 @@ ant.Conductor = silverInk;
 % --- 4. The Flawless Via Port ---
 % Placed at the exact mathematical center of your 48-point feedline!
 ant.FeedLocations = [-0.25e-3, -14.75e-3, 1, 3];
-ant.FeedDiameter = 0.5e-3;
+ant.FeedDiameter = 0.25e-3;
 
 % View Geometry
 figure;
