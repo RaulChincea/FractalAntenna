@@ -1,6 +1,23 @@
-% --- 1. Generate the 48-Point Fractal Geometry ---
+% =========================================================================
+% Script: Conformal Bending Geometry and 3D Mesh Transformation
+% Description: Attempts to evaluate the impedance detuning of the fractal 
+%              CPW antenna when conformally deformed around a cylindrical 
+%              radius (R = 30 mm), simulating a human arm. 
+%              NOTE: This script demonstrates the mathematical geometry 
+%              transformation but exposes the fundamental limitations of 
+%              the 2.5D MoM solver for volumetric (Z-varying) calculations.
+%
+% Dependencies:
+%   - Environment: MATLAB 25.2.0.3123386 (R2025b) Update 3 or later
+%   - Toolboxes: Antenna Toolbox
+% =========================================================================
+
+% --- 1. Radiating Element: 48-Point Fractal Geometry Definition ---
+% Initialize the coordinate matrix for the continuous serpentine trace
 origin = [-9 -60 0];
 points = zeros(48,3);
+
+% Define relative spatial transformations for the fractal trace
 points(1, :) = origin;
 points(2, :) = points(1, :) + [0 36 0];
 points(3, :) = points(2, :) + [6 0 0];
@@ -50,75 +67,80 @@ points(46, :) = points(45, :) + [0 -24 0];
 points(47, :) = points(46, :) + [6 0 0];
 points(48, :) = points(47, :) + [0 -36 0];
 
-% Stretch Y-axis by 4% to hit 2.5 GHz
+% Resonance Compensation: Stretch Y-axis by 4% to target 2.5 GHz
 points(:, 2) = (points(:, 2) - (-60)) * 1.04 + (-60);
 
-% Scale down to mm, convert to meters
+% Normalize coordinate scaling to standard SI units (meters)
 points = (points / 4) * 1e-3;
 
-% --- 2. Construct the Single-Layer Flat Metal Geometry ---
+% --- 2. Planar Geometry Unification ---
+% Construct individual components for a single-layer transformation
 topLayer = antenna.Polygon('Vertices', points);
 groundLeft  = antenna.Rectangle('Length', 11e-3, 'Width', 8e-3, 'Center', [-9.75e-3, -11e-3]);
 groundRight = antenna.Rectangle('Length', 11e-3, 'Width', 8e-3, 'Center', [9.25e-3, -11e-3]);
 groundBridge = antenna.Rectangle('Length', 10e-3, 'Width', 0.5e-3, 'Center', [-0.25e-3, -14.75e-3]);
 
-% Boolean Addition: Merge everything into one flat pure-metal shape
+% Boolean Addition: Merge trace and ground planes into a single unified 
+% pure-metal planar shape to allow for holistic conformal meshing.
 geom = topLayer + groundLeft + groundRight + groundBridge;
 
-% --- 3. Extract the Mesh for Coordinate Warping ---
-% Create an invisible figure so it doesn't flash on your screen
+% --- 3. Pre-Deformation Mesh Discretization ---
+% Due to object-oriented encapsulation, direct triangulation is bypassed 
+% by generating the mesh graphically and extracting the raw patch data.
 fig = figure('Visible', 'off'); 
 mesh(geom, 'MaxEdgeLength', 1.0e-3);
 
-% Forcefully search the entire figure hierarchy for the raw Patch graphics object
+% Extract the planar coordinate vertices (p) and triangle connectivity (t)
 patchObj = findobj(fig, 'Type', 'Patch');
-
-% Extract the coordinates and triangle IDs directly from the Patch, and transpose them
 p = patchObj(1).Vertices'; 
 t = patchObj(1).Faces';
-
-% Clean up by closing the invisible figure
 close(fig);
 
-% --- 4. Mathematical Cylindrical Transformation (Radius = 30 mm) ---
+% --- 4. Cylindrical Coordinate Transformation ---
+% Target conformal bending radius (30 mm = approximate human arm)
 R = 30e-3;
 p_bent = zeros(size(p));
 
-% p(1,:) = X, p(2,:) = Y, p(3,:) = Z
-p_bent(1,:) = R * sin(p(1,:) / R);       % X wraps spherically around the cylinder
-p_bent(2,:) = p(2,:);                    % Y remains completely vertical
-p_bent(3,:) = R * cos(p(1,:) / R) - R;   % Z arcs backward into 3D space
+% Map 2D Cartesian coordinates to a 3D cylindrical shell
+p_bent(1,:) = R * sin(p(1,:) / R);       % X wraps azimuthally around the cylinder
+p_bent(2,:) = p(2,:);                    % Y remains completely longitudinal (vertical)
+p_bent(3,:) = R * cos(p(1,:) / R) - R;   % Z arcs perpendicularly into 3D space
 
-% --- 5. Rebuild as a 3D Conformal Mesh Antenna ---
+% --- 5. 3D Conformal Mesh Reconstruction ---
+% Reassemble the discrete elements into a custom 3D mesh object
 bentAnt = customAntennaMesh(p_bent, t);
 
-% Calculate the transformed 3D feed coordinates
-% Flat Feed Gap was across Y = -14.5 (trace) to Y = -14.75 (bridge) at X = -0.25
+% Translate the discrete planar feed coordinates into the new 3D domain
 feedX_flat = -0.25e-3;
 feedX_bent = R * sin(feedX_flat / R);
 feedZ_bent = R * cos(feedX_flat / R) - R;
 
+% Define the localized gap port across the conformally bent micro-bridge
 pt1_bent = [feedX_bent, -14.5e-3, feedZ_bent];
 pt2_bent = [feedX_bent, -14.75e-3, feedZ_bent];
-
-% Assign the gap port in 3D space
 bentAnt = createFeed(bentAnt, pt1_bent, pt2_bent);
 
-% View the beautiful curved geometry
+% Visualize the successfully deformed 3D geometry
 figure;
 show(bentAnt);
-title('Conformally Bent Fractal CPW (R = 30 mm)');
+title('Conformally Bent Fractal CPW Geometry (R = 30 mm)');
 
-% --- 6. Electromagnetic Simulation (40 Frequencies) ---
-% Using the smart sweep to bypass flat tails
+% --- 6. Electromagnetic Evaluation & Solver Limitations ---
+% Define smart sweep frequency range (2.0 GHz to 3.0 GHz)
 freqRange = linspace(2.0e9, 3.0e9, 40);
 
-S = sparameters(bentAnt, freqRange);
+% IMPORTANT NOTE: The following calls will trigger a solver fault. 
+% The MATLAB Antenna Toolbox utilizes a 2.5D Method of Moments (MoM) solver. 
+% This numerical method intrinsically requires basis functions to remain 
+% strictly within the X-Y plane (Z-coordinate cannot vary). 
+% Evaluating this 3D transformed mesh requires transitioning to a 
+% full 3D Finite Element Method (FEM) solver, such as Ansys HFSS.
 
-figure;
-rfplot(S);
-title('Simulated S11 (Bent Antenna, Free Space)');
+% S = sparameters(bentAnt, freqRange);
+% figure;
+% rfplot(S);
+% title('Simulated S11 (Bent Antenna, Free Space)');
 
-figure;
-pattern(bentAnt, 2.5e9);
-title('3D Radiation Pattern at 2.5 GHz (Bent)');
+% figure;
+% pattern(bentAnt, 2.5e9);
+% title('3D Radiation Pattern at 2.5 GHz (Bent)');

@@ -90,7 +90,7 @@ muscle.LossTangent = 0.03; % Capped at MATLAB's maximum
 % --- Clothing Isolation Layer ---
 cotton = dielectric("Name", "Cotton");
 cotton.EpsilonR = 1.6; 
-cotton.Thickness = 1e-3; % 1 mm thickness 
+cotton.Thickness = 3e-3; % 1 mm thickness 
 cotton.LossTangent = 0.02;
 
 % --- 2. Build the Dual-Layer Geometry ---
@@ -106,7 +106,7 @@ groundRight = antenna.Rectangle('Length', 11e-3, 'Width', 8e-3, 'Center', [9.25e
 
 % 2. The Micro-Bridge (Starving the parasitic capacitor!)
 % Shrunk the width from 2.0 mm down to 0.5 mm, and moved it to the very bottom edge.
-groundBridge = antenna.Rectangle('Length', 10e-3, 'Width', 0.5e-3, 'Center', [-0.25e-3, -14.75e-3]);
+groundBridge = antenna.Rectangle('Length', 10e-3, 'Width', 1.5e-3, 'Center', [-0.25e-3, -14.75e-3]);
 
 bottomLayer = groundLeft + groundRight + groundBridge;
 

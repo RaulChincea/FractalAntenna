@@ -1,7 +1,21 @@
-% --- 48-Point Fractal Geometry ---
+% =========================================================================
+% Script: Flexible Fractal CPW Antenna Simulation (Baseline Free Space)
+% Description: Evaluates the impedance and radiation characteristics of a 
+%              single-layer fractal/serpentine coplanar waveguide (CPW) 
+%              antenna approximated as a dual-layer structure for MoM 
+%              solver stability. Target center frequency: 2.5 GHz.
+%
+% Dependencies:
+%   - Environment: MATLAB 25.2.0.3123386 (R2025b) Update 3 or later
+%   - Toolboxes: Antenna Toolbox
+% =========================================================================
+
+% --- 1. Radiating Element: 48-Point Fractal Geometry Definition ---
+% Initialize the coordinate matrix for the continuous serpentine trace
 origin = [-9 -60 0];
 points = zeros(48,3);
 
+% Define relative spatial transformations for the fractal trace
 points(1, :) = origin;
 points(2, :) = points(1, :) + [0 36 0];
 points(3, :) = points(2, :) + [6 0 0];
@@ -51,37 +65,41 @@ points(46, :) = points(45, :) + [0 -24 0];
 points(47, :) = points(46, :) + [6 0 0];
 points(48, :) = points(47, :) + [0 -36 0];
 
-% Scale to meters
+% Normalize coordinate scaling to standard SI units (meters)
 points = points / 4;
 points = points * 1e-3;
 
-% --- 1. Materials ---
+% --- 2. Dielectric and Conductive Material Specifications ---
+% Define flexible substrate characteristics
 d = dielectric("Name", "Polyimide");
 d.EpsilonR = 3.4; 
 d.Thickness = 0.024e-3;
 d.LossTangent = 0.005;
 
+% Define radiating conductor characteristics (simulating printed fabrication)
 silverInk = metal('Silver');
 silverInk.Thickness = 1e-6; 
 
-% --- 2. Build the Dual-Layer Geometry ---
-% EXPANDED BOARD: 32x32 mm 
+% --- 3. Geometric Assembly: Dual-Layer CPW Approximation ---
+% Define overall substrate footprint (36x36 mm)
 boardShape = antenna.Rectangle('Length', 36e-3, 'Width', 36e-3);
 
-% Top Layer: Your custom 48-point polygon
+% Construct top radiating layer
 topLayer = antenna.Polygon('Vertices', points);
 
-% 1. The Mathematically Perfect Ground Plates (2.0 mm gaps)
+% Construct bottom ground layer
+% Left and right coplanar ground planes offset to maintain a 2.0 mm gap
 groundLeft  = antenna.Rectangle('Length', 11e-3, 'Width', 8e-3, 'Center', [-9.75e-3, -11e-3]);
 groundRight = antenna.Rectangle('Length', 11e-3, 'Width', 8e-3, 'Center', [9.25e-3, -11e-3]);
 
-% 2. The Micro-Bridge (Starving the parasitic capacitor!)
-% Shrunk the width from 2.0 mm down to 0.5 mm, and moved it to the very bottom edge.
+% Define impedance-tuning micro-bridge. Width restricted to 0.5 mm to 
+% minimize parallel parasitic capacitance and maintain 50-ohm match.
 groundBridge = antenna.Rectangle('Length', 10e-3, 'Width', 0.5e-3, 'Center', [-0.25e-3, -14.75e-3]);
 
+% Execute boolean addition for bottom layer
 bottomLayer = groundLeft + groundRight + groundBridge;
 
-% --- 3. Assemble PCB Stack ---
+% --- 4. PCB Stackup Initialization ---
 ant = pcbStack;
 ant.Name = 'Fractal_CPW_DualLayer';
 ant.BoardShape = boardShape;
@@ -89,36 +107,40 @@ ant.BoardThickness = d.Thickness;
 ant.Layers = {topLayer, d, bottomLayer}; 
 ant.Conductor = silverInk;
 
-% --- 4. The Flawless Via Port ---
-% Placed at the exact mathematical center of your 48-point feedline!
+% --- 5. Excitation Port Configuration ---
+% Assign a localized via port bridging the top feedline and bottom micro-bridge
 ant.FeedLocations = [-0.25e-3, -14.75e-3, 1, 3];
+% Restricted feed diameter to prevent edge-collision errors in the meshing algorithm
 ant.FeedDiameter = 0.25e-3;
 
-% View Geometry
+% Visualize the constructed dual-layer geometry
 figure;
 show(ant);
-title('Fractal CPW Geometry (Dual-Layer)');
+title('Fractal CPW Geometry (Dual-Layer Approximation)');
 
-% --- Phase 2: Electromagnetic Simulation ---
+% --- 6. Electromagnetic (MoM) Simulation and Post-Processing ---
+% Define wideband evaluation range (1.5 GHz to 3.5 GHz)
 freqRange = linspace(1.5e9, 3.5e9, 41);
 
-% 1. Calculate S-Parameters
+% Compute Scattering Parameters
 S = sparameters(ant, freqRange);
 
-% 2. Plot S11 in standard negative dB format
+% Evaluate and plot Return Loss (S11)
 figure;
 rfplot(S);
-title('Simulated S11 (Fractal Antenna)');
+title('Simulated Return Loss (S11) in Free Space');
 
-% 3. View the Smith Chart
+% Evaluate impedance matching on the Smith Chart
 figure;
 smithplot(S);
-title('Smith Chart');
+title('Impedance Matching (Smith Chart)');
 
-% 4. Surface Current Distribution
+% Compute and visualize near-field surface current distribution at target resonance
 figure;
 current(ant, 2.45e9);
 title('Surface Current Distribution at 2.45 GHz');
 
+% Plot complex impedance components (Resistance and Reactance)
 figure;
-impedance(ant, freqRange)
+impedance(ant, freqRange);
+title('Antenna Impedance Profile');
