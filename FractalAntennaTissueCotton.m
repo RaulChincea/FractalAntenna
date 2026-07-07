@@ -1,7 +1,22 @@
-% --- 48-Point Fractal Geometry ---
+% =========================================================================
+% Script: Flexible Fractal CPW Antenna Simulation (Textile Isolation Gap)
+% Description: Evaluates the impedance recovery and radiation performance 
+%              of the CPW antenna when decoupled from the tissue phantom 
+%              using a low-permittivity textile (cotton) layer. 
+%              Incorporates micro-bridge capacitive retuning and 
+%              meander-line inductive scaling to restore 50-ohm resonance.
+%
+% Dependencies:
+%   - Environment: MATLAB 25.2.0.3123386 (R2025b) Update 3 or later
+%   - Toolboxes: Antenna Toolbox
+% =========================================================================
+
+% --- 1. Radiating Element: 48-Point Fractal Geometry Definition ---
+% Initialize the coordinate matrix for the continuous serpentine trace
 origin = [-9 -60 0];
 points = zeros(48,3);
 
+% Define relative spatial transformations for the fractal trace
 points(1, :) = origin;
 points(2, :) = points(1, :) + [0 36 0];
 points(3, :) = points(2, :) + [6 0 0];
@@ -51,115 +66,126 @@ points(46, :) = points(45, :) + [0 -24 0];
 points(47, :) = points(46, :) + [6 0 0];
 points(48, :) = points(47, :) + [0 -36 0];
 
-% 1. Stretch ONLY the Y-axis by 4% to lower the frequency to 2.5 GHz
-% We anchor the stretch at the bottom edge (Y = -60) so the feedline doesn't move!
-points(:, 2) = (points(:, 2) - (-60)) * 1.04 + (-60);
+% Inductance Tuning: Compress the Y-axis by a factor of 0.8. 
+% By physically shortening the longitudinal meander lines, the series 
+% inductance (L) is reduced, shifting the resonant frequency upward 
+% (from ~2.05 GHz toward the 2.45 GHz ISM band) to compensate for the 
+% added parallel capacitance of the widened micro-bridge.
+points(:, 2) = (points(:, 2) - (-60)) * 0.8 + (-60);
 
-% Scale to meters
+% Normalize coordinate scaling to standard SI units (meters)
 points = points / 4;
 points = points * 1e-3;
 
-% --- 1. Materials ---
+% --- 2. Dielectric, Conductive, and Phantom Material Specifications ---
+% Define flexible substrate characteristics
 d = dielectric("Name", "Polyimide");
 d.EpsilonR = 3.4; 
 d.Thickness = 0.024e-3;
 d.LossTangent = 0.005;
 
+% Define radiating conductor characteristics
 silverInk = metal('Silver');
 silverInk.Thickness = 1e-6; 
 
-% --- Biological Tissue Phantom (at 2.45 GHz) ---
-% 1. Skin Layer
+% Define 3-Layer Biological Tissue Phantom
+% Loss tangent constrained to 0.03 for 2.5D MoM numerical stability.
 skin = dielectric("Name", "Skin");
 skin.EpsilonR = 38.0; 
 skin.Thickness = 2e-3; 
-skin.LossTangent = 0.03; % Capped at MATLAB's maximum
+skin.LossTangent = 0.03; 
 
-% 2. Fat Layer
 fat = dielectric("Name", "Fat");
 fat.EpsilonR = 5.28; 
 fat.Thickness = 5e-3; 
-fat.LossTangent = 0.03; % Capped at MATLAB's maximum
+fat.LossTangent = 0.03; 
 
-% 3. Muscle Layer
 muscle = dielectric("Name", "Muscle");
 muscle.EpsilonR = 52.7; 
 muscle.Thickness = 10e-3; 
-muscle.LossTangent = 0.03; % Capped at MATLAB's maximum
+muscle.LossTangent = 0.03; 
 
-% --- Clothing Isolation Layer ---
+% Define Textile Isolation Layer (Cotton)
+% Acts as a low-permittivity near-field buffer to decouple the antenna 
+% from the highly capacitive and lossy biological tissue.
 cotton = dielectric("Name", "Cotton");
 cotton.EpsilonR = 1.6; 
-cotton.Thickness = 3e-3; % 1 mm thickness 
+cotton.Thickness = 3e-3; 
 cotton.LossTangent = 0.02;
 
-% --- 2. Build the Dual-Layer Geometry ---
-% EXPANDED BOARD: 32x32 mm 
+% --- 3. Geometric Assembly: Dual-Layer CPW Approximation ---
+% Define overall substrate footprint (36x36 mm)
 boardShape = antenna.Rectangle('Length', 36e-3, 'Width', 36e-3);
 
-% Top Layer: Your custom 48-point polygon
+% Construct top radiating layer
 topLayer = antenna.Polygon('Vertices', points);
 
-% 1. The Mathematically Perfect Ground Plates (2.0 mm gaps)
+% Construct bottom ground layer (2.0 mm gap)
 groundLeft  = antenna.Rectangle('Length', 11e-3, 'Width', 8e-3, 'Center', [-9.75e-3, -11e-3]);
 groundRight = antenna.Rectangle('Length', 11e-3, 'Width', 8e-3, 'Center', [9.25e-3, -11e-3]);
 
-% 2. The Micro-Bridge (Starving the parasitic capacitor!)
-% Shrunk the width from 2.0 mm down to 0.5 mm, and moved it to the very bottom edge.
+% Capacitive Retuning Micro-Bridge:
+% Width expanded from 0.5 mm to 1.5 mm. This triples the capacitive 
+% surface area at the feed point, injecting parallel capacitance (C) 
+% back into the circuit to recover the 50-ohm match lost due to the 
+% 3 mm textile gap displacement.
 groundBridge = antenna.Rectangle('Length', 10e-3, 'Width', 1.5e-3, 'Center', [-0.25e-3, -14.75e-3]);
-
 bottomLayer = groundLeft + groundRight + groundBridge;
 
-% --- 3. Assemble PCB Stack ---
+% --- 4. PCB Stackup Initialization ---
 ant = pcbStack;
 ant.Name = 'Fractal_CPW_On_Tissue_With_Cotton';
 ant.BoardShape = boardShape;
-% Add cotton to the total thickness calculation!
+
+% Total board thickness sum includes the substrate, textile, and biological layers
 ant.BoardThickness = d.Thickness + cotton.Thickness + skin.Thickness + fat.Thickness + muscle.Thickness; 
 
-% Stack: Top Metal -> Polyimide -> Bottom Metal -> Cotton -> Skin -> Fat -> Muscle
+% Assemble the planar volumetric stack (Top to Bottom)
 ant.Layers = {topLayer, d, bottomLayer, cotton, skin, fat, muscle}; 
 ant.Conductor = silverInk;
 
-% --- 4. The Flawless Via Port ---
-% Placed at the exact mathematical center of your 48-point feedline!
+% --- 5. Excitation Port and Mesh Configuration ---
+% Assign a localized via port bridging the top feedline and bottom micro-bridge
 ant.FeedLocations = [-0.25e-3, -14.75e-3, 1, 3];
 ant.FeedDiameter = 0.25e-3;
 
-% View Geometry
+% Visualize the constructed dual-layer geometry
 figure;
 show(ant);
-title('Fractal CPW Geometry (Dual-Layer)');
+title('Fractal CPW Geometry (Cotton Isolated)');
 
-% Forces the MoM solver to use larger triangles, drastically reducing the N x N matrix size
+% Memory Management: Force maximum edge length to prevent O(N^3) RAM exhaustion
 mesh(ant, 'MaxEdgeLength', 2.5e-3);
 
-% --- Phase 2: Electromagnetic Simulation ---
+% --- 6. Electromagnetic (MoM) Simulation and Post-Processing ---
+% Define wideband evaluation range to capture the retuned resonance point
 freqRange = linspace(2.0e9, 3.5e9, 31);
 
-% 1. Calculate S-Parameters
+% Compute Scattering Parameters
 S = sparameters(ant, freqRange);
 
-% 2. Plot S11 in standard negative dB format
+% Evaluate and plot Return Loss (S11)
 figure;
 rfplot(S);
-title('Simulated S11 (Fractal Antenna)');
+title('Simulated Return Loss (S11) with 3mm Cotton Isolation');
 
-% 3. View the Smith Chart
+% Evaluate impedance matching on the Smith Chart
 figure;
 smithplot(S);
-title('Smith Chart');
+title('Impedance Matching (Smith Chart)');
 
-% 4. Surface Current Distribution
+% Compute and visualize near-field surface current distribution
 figure;
 current(ant, 2.45e9);
 title('Surface Current Distribution at 2.45 GHz');
 
+% Plot complex impedance components (Resistance and Reactance)
 figure;
-impedance(ant, freqRange)
+impedance(ant, freqRange);
+title('Antenna Impedance Profile');
 
-% Plot the 3D Radiation Pattern at the exact target frequency
-targetFreq = 2.45e9; % Or update to 2.5e9 / 2.6e9 depending on your current center!
+% Plot the 3D Radiation Pattern at the target frequency
+targetFreq = 2.45e9; 
 figure;
 pattern(ant, targetFreq);
 title(['3D Radiation Pattern at ', num2str(targetFreq/1e9), ' GHz']);
